@@ -67,6 +67,7 @@ POST /api/register → Register new user
 
 POST /api/login → Login and get JWT token
 
+POST /verify/OTP -> SMTPLIB
 Chat
 POST /api/chat → Send a message and get chatbot reply
 
@@ -127,7 +128,7 @@ final response = await http.post(
 👨‍💻 Author
 Developed by Your Name
 
-Email: your.email@example.com
+Email: adelerekehinde01@gmail.com
 
 📜 License
 This project is licensed under the MIT License.
