@@ -10,8 +10,8 @@ import requests
 from datetime import datetime, timedelta, UTC
 import os
 from dotenv import load_dotenv
-from database import init_db, db
-from model import User, Chat
+from flask_api.src.database import init_db, db
+from flask_api.src.model import User, Chat
 
 load_dotenv()
 

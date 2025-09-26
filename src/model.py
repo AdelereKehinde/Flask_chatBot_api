@@ -1,5 +1,5 @@
 from datetime import datetime, UTC, timedelta
-from database import db
+from flask_api.src.database import db
 
 
 class User(db.Model):
