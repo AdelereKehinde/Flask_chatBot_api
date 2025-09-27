@@ -1,7 +1,33 @@
+# Environment variables
 .env
-instance/
+.env.local
+.env.prod
+
+# Python
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
+.Python
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Instance folder (Flask)
+instance/
+
+# Screenshots
 screenshots/
+
+# Specific files to ignore
 delete.py
 login.py
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+luminous_ai.db
