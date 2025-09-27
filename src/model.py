@@ -1,5 +1,5 @@
 from datetime import datetime, UTC, timedelta
-from flask_api.src.database import db
+from database import db
 
 
 class User(db.Model):
@@ -41,3 +41,27 @@ class Chat(db.Model):
         default=lambda: datetime.now(UTC),
         onupdate=lambda: datetime.now(UTC)
     )
+
+class AdminActivity(db.Model):
+    __tablename__ = "admin_activities"
+
+    id = db.Column(db.Integer, primary_key=True)
+    type = db.Column(db.String(50), nullable=False)   # e.g. "login", "register", "chat", "admin_login"
+    user_id = db.Column(db.String(50), nullable=True) # can be "admin" or actual user_id
+    email = db.Column(db.String(120), nullable=True)
+    detail = db.Column(db.Text, nullable=True)        # extra info like "user registered", chat msg
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def __repr__(self):
+        return f"<AdminActivity {self.type} by {self.email} at {self.timestamp}>" 
+    
+class Admin(db.Model):
+    __tablename__ = "admins"
+
+    id = db.Column(db.Integer, primary_key=True)
+    email = db.Column(db.String(120), unique=True, nullable=False)
+    password = db.Column(db.String(255), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def __repr__(self):
+        return f"<Admin {self.email}>"    

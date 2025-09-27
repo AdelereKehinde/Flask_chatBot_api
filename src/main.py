@@ -1,17 +1,22 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+from flask_socketio import SocketIO, emit
 from flask_bcrypt import Bcrypt
 from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
 import smtplib
 from email.mime.text import MIMEText
 import random
 import json
+from admin import admin_bp  
 import requests
 from datetime import datetime, timedelta, UTC
 import os
 from dotenv import load_dotenv
-from flask_api.src.database import init_db, db
-from flask_api.src.model import User, Chat
+from database import init_db, db
+from model import User, Chat
+from admin import record_admin_activity
+from model import User, Chat, AdminActivity, db, Admin
+
 
 load_dotenv()
 
@@ -21,6 +26,14 @@ app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL', 'sqlite:///lum
 app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'jwt-secret-key-here')
 app.config['SMTP_EMAIL'] = 'adelerekehinde01@gmail.com'
 app.config['SMTP_PASSWORD'] = 'wiyzipxahtgqlypb'
+socketio = SocketIO(app, cors_allowed_origins="*")
+
+load_dotenv()
+
+ADMIN_EMAIL = os.getenv("ADMIN_EMAIL")
+ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD")
+
+app.register_blueprint(admin_bp)
 
 CORS(app, resources={r"/api/*": {"origins": "*", "methods": ["GET", "POST", "OPTIONS"], "allow_headers": ["Content-Type", "Authorization"]}})
 
@@ -34,10 +47,16 @@ def user_identity_lookup(user):
 
 @jwt.user_lookup_loader
 def user_lookup_callback(_jwt_header, jwt_data):
-    identity = jwt_data["sub"]
-    return User.query.filter_by(id=int(identity)).first()  # Convert back to int for query
+    identity = jwt_data["sub"]  
 
-# === FIX 3: Token Expiration ===
+    if identity == "admin":
+        return {"id": "admin", "email": ADMIN_EMAIL}
+
+    try:
+        return User.query.filter_by(id=int(identity)).first()
+    except ValueError:
+        return None
+
 app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(hours=24)
 
 # Initialize database
@@ -67,8 +86,8 @@ def log_request():
         print(f"--- Request End ---")
 
 # OpenRouter API configuration
-OPENROUTER_API_KEY = "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"
-OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "API key")
+OPENROUTER_URL = os.getenv("OPENROUTER_URL", "YOUR_Url_Here")
 
 def send_otp_email(email, otp):
     try:
@@ -76,11 +95,12 @@ def send_otp_email(email, otp):
         body = f"""
         <html>
             <body>
-                <h2>Welcome to Luminous AI!</h2>
-                <p>Your OTP verification code is: <strong>{otp}</strong></p>
+                <h1 style="color:blue;">Welcome to Luminous AI!</h1>
+                <h3>For Security Reason Verify Your Email Before Proceeding</h3>
+                <p>Your OTP verification code is: <strong style="color:red;">{otp}</strong></p>
                 <p>This code will expire in 10 minutes.</p>
                 <br>
-                <p>Best regards,<br>Luminous AI Team</p>
+                <p>Best regards,<br>Luminous AI Team, <br> Kehinde</p>
             </body>
         </html>
         """
@@ -100,6 +120,8 @@ def send_otp_email(email, otp):
 
 def generate_otp():
     return str(random.randint(100000, 999999))
+
+
 
 # ---------------- LOGIN ----------------
 @app.route('/api/login', methods=['POST'])
@@ -133,6 +155,12 @@ def login():
 
         # === FIX 4: Convert to string in token creation ===
         access_token = create_access_token(identity=str(user.id))
+        
+        record_admin_activity({
+        "type": "login",
+        "user_id": user.id,    
+        "email": user.email
+    })
         response_data = {
             'message': 'Login successful',
             'access_token': access_token,
@@ -151,6 +179,16 @@ def login():
     except Exception as e:
         print(f"Login error: {str(e)}")
         return jsonify({'error': f'Login failed: {str(e)}'}), 500
+    
+@app.post("/api/admin/notify")
+def send_notification():
+    data = request.json
+    message = data.get("message")
+
+    # Emit to all connected users
+    socketio.emit("new_notification", {"message": message}, broadcast=True)
+
+    return {"status": "Notification sent"}    
 
 @app.route('/api/register', methods=['POST'])
 def register():
@@ -187,6 +225,13 @@ def register():
         db.session.commit()
         print(f"User registered: {email}, OTP: {otp}")
         
+        record_admin_activity({
+        "type": "register",
+        "user_id": user.id,
+        "email": user.email,
+        "detail": "User registered"
+    })
+        
         if send_otp_email(email, otp):
             return jsonify({'message': 'OTP sent to email'}), 201
         else:
@@ -195,7 +240,7 @@ def register():
     except Exception as e:
         print(f"Register error: {str(e)}")
         return jsonify({'error': str(e)}), 500
-    
+
 @app.route('/api/verify-otp', methods=['POST'])
 def verify_otp():
     try:
@@ -368,6 +413,13 @@ def chat():
             db.session.add(chat)
 
         db.session.commit()
+        record_admin_activity({
+        "type": "chat",
+        "user_id": user.id,  
+        "email": user.email,
+        "detail": message
+    })
+
 
         return jsonify({
             'response': ai_response,
@@ -407,6 +459,45 @@ def get_chats():
     except Exception as e:
         print(f"Get chats error: {str(e)}")
         return jsonify({'error': f"Unexpected error: {str(e)}"}), 500
+
+from flask_jwt_extended import create_access_token
+from werkzeug.security import check_password_hash
+
+@app.post("/api/admin/login")
+def admin_login():
+    data = request.json
+    email = data.get("email")
+    password = data.get("password")
+
+    if email == ADMIN_EMAIL and password == ADMIN_PASSWORD:
+        access_token = create_access_token(identity="admin")  # identity = "admin"
+        record_admin_activity({"type": "login", "user_id": "admin", "email": ADMIN_EMAIL})
+        return {"access_token": access_token}
+    else:
+        return {"error": "Invalid admin credentials"}, 401
+
+@app.get("/api/admin/users")
+def get_users():
+    users = User.query.all()
+    return jsonify([
+        {"id": u.id, "email": u.email, "name": u.name, "verified": u.is_verified}
+        for u in users
+    ])
+
+
+@app.get("/api/admin/activities")
+def get_activities():
+    activities = AdminActivity.query.order_by(AdminActivity.timestamp.desc()).all()
+    return jsonify([
+        {
+            "id": a.id,
+            "type": a.type,
+            "user_id": a.user_id,
+            "email": a.email,
+            "detail": a.detail,
+            "timestamp": a.timestamp
+        } for a in activities
+    ])    
 
 @app.route('/api/health', methods=['GET'])
 def health_check():
