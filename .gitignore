@@ -1,33 +1,36 @@
-# Environment variables
+# Environment
 .env
-.env.local
-.env.prod
 
 # Python
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
-.Python
-pip-log.txt
-pip-delete-this-directory.txt
-
-# Instance folder (Flask)
+*.db
 instance/
+.venv/
+venv/
 
-# Screenshots
+# Flask specific
+*.log
+
+# Flutter/Dart
+build/
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+pubspec.lock
+android/.gradle/
+ios/Pods/
+ios/Flutter/Flutter.framework
+ios/Flutter/Flutter.podspec
+
+# System files
+.DS_Store
+Thumbs.db
+
+# Other
 screenshots/
-
-# Specific files to ignore
 delete.py
 login.py
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# OS
-.DS_Store
-luminous_ai.db
